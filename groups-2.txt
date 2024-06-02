@@ -1,0 +1,126 @@
+<<Model with 8 users in 3 groups; total fit 15.85, avg fit 5.28 | 3.11>>
+<<Group of size 3 with members ['OrlonDog', 'AuroraLexica', 'SarvaNoMoreCanadian'] and fit score 3.11>>
+<<Group of size 3 with members ['Aest', 'Trollmore', 'AbruptlyMystic'] and fit score 2.74>>
+<<Group of size 2 with members ['Hippyphus', 'Red_Ocean'] and fit score 10.0>>
+----------------
+Group with reqs []
+OrlonDog            wr 1, r 1, s 3
+AuroraLexica        wr 1, r 1, s 4
+SarvaNoMoreCanadian wr 1, r 2, s 4
+
+NAME                PROF SEX  GORE TRAU OTHER
+OrlonDog            √    !              
+AuroraLexica                       √    
+SarvaNoMoreCanadian √    !    √    √    
+
+----------------
+Group with reqs ['Aest', 'Trollmore']
+Aest           wr 0, r 1, s 4
+Trollmore      wr 1, r 1, s 4
+AbruptlyMystic wr 0, r 1, s 4
+
+NAME           PROF SEX  GORE TRAU OTHER
+Aest           √                   
+Trollmore      √                   
+AbruptlyMystic                !    
+
+----------------
+Group with reqs []
+Hippyphus wr 1, r 4, s 4
+Red_Ocean wr 3, r 4, s 4
+
+NAME      PROF SEX  GORE TRAU OTHER
+Hippyphus √                   
+Red_Ocean √         √         
+
+
+<<Model with 23 users in 7 groups; total fit 50.52, avg fit 7.22 | 10.04>>
+<<Group of size 3 with members ['queen2880', 'ahoge_bird', 'InfiniteLine'] and fit score 10.04>>
+<<Group of size 3 with members ['Mawiscool', 'Astelian', 'BlueLightningLC'] and fit score 3.26>>
+<<Group of size 4 with members ['theBigHappy', 'LuminousZephyr', 'degeneracy', 'AstralDelphi'] and fit score 10.11>>
+<<Group of size 3 with members ['JaegerMaxim', 'SailWrite', 'Lockwood'] and fit score 1.0>>
+<<Group of size 3 with members ['WhiteRose-BlueSpace', 'OakFlame', 'T-ducky'] and fit score 11.74>>
+<<Group of size 4 with members ['TomWritingQuietly', 'walshbear', 'CownoseRay', 'RainAmbyll'] and fit score 11.04>>
+<<Group of size 3 with members ['Bigby', 'Lizzie', 'bonelesschicken0'] and fit score 3.33>>
+----------------
+Group with reqs []
+queen2880    wr 0, r 0, s 4
+ahoge_bird   wr 1, r 1, s 4
+InfiniteLine wr 0, r 1, s 4
+
+NAME         PROF SEX  GORE TRAU OTHER
+queen2880    √    √    √         
+ahoge_bird                       
+InfiniteLine √         √         
+
+----------------
+Group with reqs ['Mawiscool', 'Astelian']
+Mawiscool       wr 1, r 1, s 3
+Astelian        wr 1, r 1, s 4
+BlueLightningLC wr 1, r 1, s 3
+
+NAME            PROF SEX  GORE TRAU OTHER
+Mawiscool                           
+Astelian        √                   
+BlueLightningLC √         √         
+
+----------------
+Group with reqs ['theBigHappy', 'LuminousZephyr', 'degeneracy']
+theBigHappy    wr 1, r 1, s 4
+LuminousZephyr wr 1, r 1, s 4
+degeneracy     wr 0, r 1, s 4
+AstralDelphi   wr 1, r 4, s 4
+
+NAME           PROF SEX  GORE TRAU OTHER
+theBigHappy    √         √         
+LuminousZephyr √    !    √         
+degeneracy               √    √    
+AstralDelphi        !         √    
+
+----------------
+Group with reqs ['JaegerMaxim', 'SailWrite', 'Lockwood']
+JaegerMaxim wr 0, r 2, s 4
+SailWrite   wr 2, r 2, s 4
+Lockwood    wr 1, r 1, s 4
+
+NAME        PROF SEX  GORE TRAU OTHER
+JaegerMaxim √    !    √         
+SailWrite   √    !    √         
+Lockwood         !         !    
+
+----------------
+Group with reqs []
+WhiteRose-BlueSpace wr 1, r 1, s 4
+OakFlame            wr 1, r 4, s 4
+T-ducky             wr 2, r 2, s 3
+
+NAME                PROF SEX  GORE TRAU OTHER
+WhiteRose-BlueSpace √         √    √    
+OakFlame            √                   
+T-ducky                  !    √    √    
+
+----------------
+Group with reqs ['TomWritingQuietly', 'walshbear']
+TomWritingQuietly wr 2, r 2, s 4
+walshbear         wr 2, r 4, s 4
+CownoseRay        wr 2, r 2, s 4
+RainAmbyll        wr 2, r 3, s 4
+
+NAME              PROF SEX  GORE TRAU OTHER
+TomWritingQuietly                     
+walshbear         √                   
+CownoseRay                            
+RainAmbyll        √         √    √    
+
+----------------
+Group with reqs ['Bigby', 'Lizzie']
+Bigby            wr 3, r 3, s 4
+Lizzie           wr 2, r 4, s 4
+bonelesschicken0 wr 3, r 4, s 4
+
+NAME             PROF SEX  GORE TRAU OTHER
+Bigby                      √    √    
+Lizzie           √         √         
+bonelesschicken0      !              
+
+
