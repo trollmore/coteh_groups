@@ -677,8 +677,8 @@ with open("source.csv", "r", encoding="utf-8") as file:
         # who do you want to avoid?
         team_veto = cleaned[13]
 
-        # do you want to be in a contest-focused group?
-        contest = cleaned[-1] == "Yes"
+        # # do you want to be in a contest-focused group?
+        # contest = cleaned[-1] == "Yes"
 
         user = Person(
             name,
@@ -694,31 +694,33 @@ with open("source.csv", "r", encoding="utf-8") as file:
             cw_veto=cw_veto,
             team_pref=team_pref,
             team_veto=team_veto,
-            seasonal=contest,
+            # seasonal=contest,
         )
 
         users.append(user)
 
 clean_team_reqs(users)
 
-contest = [p for p in users if p.seasonal]
-non_contest = [p for p in users if not p.seasonal]
+# contest = [p for p in users if p.seasonal]
+# non_contest = [p for p in users if not p.seasonal]
 
-m1 = Model(users=contest.copy())
-m2 = Model(users=non_contest.copy())
+# m1 = Model(users=contest.copy())
+# m2 = Model(users=non_contest.copy())
 
-for m in [m1, m2]:
-    longest_name = max(len(p.name) for p in m.users)
-    reqs = m.get_req_clusters()
-    m.make_groups(premades=reqs)
+m = Model(users=users.copy())
+# for m in [m1, m2]:
 
-    print(m)
-    print(m.print_groups())
+longest_name = max(len(p.name) for p in m.users)
+reqs = m.get_req_clusters()
+m.make_groups(premades=reqs)
 
-    for g in m.groups:
-        print("----------------")
-        print(g.print_wc_table())
-        print(g.print_cw_table(longest_name))
-    print()
+print(m)
+print(m.print_groups())
+
+for g in m.groups:
+    print("----------------")
+    print(g.print_wc_table())
+    print(g.print_cw_table(longest_name))
+print()
 
 
