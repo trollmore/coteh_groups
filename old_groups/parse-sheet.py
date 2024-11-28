@@ -13,14 +13,12 @@ WORDCOUNT_CODE = {
 WORDCOUNT_SCALE = 10 / (len(WORDCOUNT_CODE) - 2) ** 2
 
 GENRE_CODE = {
-    "Epic Fantasy": 0,
+    "Fantasy": 0,
     "Science Fiction": 1,
     "Horror": 2,
     "Romance": 3,
-    "LitRPG/Progression Fantasy/Cultivation": 4,
-    "Cozy Fantasy/Slice of Life": 5,
-    "I have several stories, and I'd like to talk it over with my group!": 6,
-    "several": 6,
+    "I have several stories, and I'd like to talk it over with my group!": 4,
+    "several": 4,
 }
 
 SIZE_CODE = {"Pair": 2, "Small Group (3)": 3, "Small Group (4)": 4}
@@ -132,6 +130,7 @@ class Person:
                 str(self.seasonal),
             ]
         )
+
 
 class Group:
     def __init__(self, members=None, seasonal=False, reqs=None) -> None:
@@ -723,3 +722,5 @@ for g in m.groups:
     print(g.print_wc_table())
     print(g.print_cw_table(longest_name))
 print()
+
+
