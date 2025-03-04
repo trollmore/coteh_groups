@@ -8,6 +8,7 @@ WORDCOUNT_CODE = {
     "Between 4&000 and 6&000": 2,
     "Over 6&000": 3,
     "I don't care& I just like pre-reading stuff!": 4,
+    "": 5
 }
 # the max diff^2 is 9, so this allows us to normalize to a 0-10 scale
 WORDCOUNT_SCALE = 10 / (len(WORDCOUNT_CODE) - 2) ** 2
@@ -23,7 +24,7 @@ GENRE_CODE = {
     "several": 6,
 }
 
-SIZE_CODE = {"Pair": 2, "Small Group (3)": 3, "Small Group (4)": 4}
+SIZE_CODE = {"Pair": 2, "Small Group (3)": 3, "Small Group (4)": 4, "":5}
 
 CONTENT_WARNINGS = [
     "Profanity",
@@ -34,7 +35,7 @@ CONTENT_WARNINGS = [
 
 SORT_WEIGHTS = {
     "group_veto": 10000,
-    "seasonal" : 10000,
+    "seasonal" : 9900,
     "friend_req": 1000,
     "wordcount": 20,
     "cw_trauma": 18,
@@ -46,9 +47,31 @@ SORT_WEIGHTS = {
     "genre": 5,
 }
 
-# used for fuzzy matching on name fields for team requests and vetos; max 99
-NAME_TOLERANCE = 85
+QUESTION_CODES = {
+    "Timestamp" : 'timestamp',
+    "What's your COTEH Discord Username?" : 'name',
+    "What's your approximate age?" : 'is_minor',
+    "What are you mainly looking for feedback on?" : 'fb_wanted',
+    "About how many words do you plan to bring to critique each week?" : 'words_wr',
+    "What genre is your story? Please choose the one that BEST fits your story." : 'genre_wr',
+    "What Content Warnings does your story have? Please choose all that apply. (We do not currently host sexually explicit/smut critique. Sorry. Fade to Black should be fine.)" : 'cw_wr',      
+    "We're asking people to be sure they have four chapters they'd like to have critiqued before they sign up in order to guarantee that they'll have material to bring to the later weeks of critique groups. Please include a link to a Google Doc with your four chapters." : 'chapters',
+    "Would you prefer to work as a pair& a group of three& or four total people? Please choose all that apply." : 'size_pref',
+    "What feedback do you feel comfortable giving?" : 'fb_provide',
+    "How many words can you commit to critiquing each week per Housemate? Try to line this up with what you're willing to bring yourself." : 'words_r',
+    "What genres would you like to critique? Please choose ALL that apply." : 'genre_r',
+    "What Content Warnings are you not comfortable reading and critiquing? Please choose all that apply.  (We do not currently host sexually explicit/smut critique. Sorry. Fade to Black should be fine.)" : 'cw_veto',
+    "If you were on a team and would like to work with them again& please list the members of your team and your team name. This question is optional." : 'team_pref',
+    "Is there anyone you would prefer NOT to work with again?" : 'team_veto',
+    "Did you have any problem members (no-shows& refused to give feedback& or overly abrasive/negative feedback)? Please list all members who apply so we can investigate." : 'naughty_list',
+    "I verify that I've read the Manuscript Critiques infographic above.\n" : 'verify',
+    'Have you been in critique houses before? ' : 'prev_crit',
+    'Have you completed a book before? (This question is not disqualifying& just for research and team balance purposes.)' : 'book_done'
+}
 
+# used for fuzzy matching on name fields for team requests and vetos
+# values below 80 don't seem to work very well; max 99
+NAME_TOLERANCE = 90
 
 def extend_str(input, length):
     """
@@ -104,10 +127,19 @@ class Person:
         their_foe = self.name in other.team_veto
         return 1 if my_foe or their_foe else 0
 
+    def genre_dist(self, other):
+        score = 0
+        if self.genre_wr not in other.genre_r:
+            score += 1
+        if other.genre_wr not in self.genre_r:
+            score += 1
+        return score
+
     def gen_dist(self, other):
         total = 0
         total += self.word_dist(other) * SORT_WEIGHTS["wordcount"]
         total += self.veto_dist(other) * SORT_WEIGHTS["group_veto"]
+        total += self.genre_dist(other) * SORT_WEIGHTS["genre"]
         # we want friends to increase fit (e.g. make it lower)
         total -= self.friend_dist(other) * SORT_WEIGHTS["friend_req"]
 
@@ -196,6 +228,11 @@ class Group:
         return self
     
     def steal_least_compatible_member_from(self, other, virtual=False) -> tuple[int, float] | None:
+        """
+        Checks all possibilities where one group member is transfered from another group,
+        then makes the transfer that best increases overall fit if one exists.
+        The "virtual" flag prevents any actual transfer from occurring and just returns the result.
+        """
         best_delta = 0
         result = None
 
@@ -226,7 +263,7 @@ class Group:
         score = 0
         discount = ((self.size) * (self.size - 1)) / 2
 
-        # shortcut out if group is invalid
+        # during seasonal events, shortcut out if group isn't all in the same event 
         if not self.valid_seasonal:
             return SORT_WEIGHTS["seasonal"]
         
@@ -240,7 +277,7 @@ class Group:
         size_penalty = abs(3 - self.size)
         score += SORT_WEIGHTS["group_size"] ** size_penalty
 
-        cws = { cw : 0 for cw in CONTENT_WARNINGS}
+        cws = { cw : 0 for cw in CONTENT_WARNINGS }
 
         while tmp:
             p: Person = tmp.pop()
@@ -549,15 +586,19 @@ class Model:
     def __repr__(self) -> str:
         return f"<<Model with {len(self.users)} users in {self.group_count} groups; {self.print_fit()}>>"
 
-
-
-
-
 #######################################################
 #                  loose functions                    #
 #######################################################
 
-def clean_data(raw_data):
+def clean_data(raw_data: str) -> str:
+    """
+    cleans response data for a user submission.
+
+    Note that carriage return characters in response data will read
+    as if each one is a separate submission and should be dealt with
+    before this point.
+    """
+
     # checksum for quotes
     if raw_data.count('"') % 2 != 0:
         criminal = raw_data.split(",")[1]
@@ -565,9 +606,9 @@ def clean_data(raw_data):
             f'Malformed input: odd number of quote characters ( " ) in response data for {criminal}.'
         )
 
-    # replace commas within responses
+    # replace commas within responses with &
     result: str = raw_data
-    result = result.replace("&", " ")
+    result = result.replace("&", " ") # first get rid of existing '&' characters
 
     replace_mode = False
     for idx in range(len(raw_data)):
@@ -585,7 +626,7 @@ def clean_data(raw_data):
 
     return result
 
-def translate_fb_pref(fb_str):
+def translate_fb_pref(fb_str) -> str:
     return (
         "Writer" if "Writer" in fb_str else "Reader" if "Reader" in fb_str else "Hype"
     )
@@ -608,99 +649,120 @@ def clean_team_reqs(users) -> None:
         if team_veto:
             p.team_veto = [name for name in name_list if fuzz.partial_ratio(name, team_veto) > NAME_TOLERANCE]
 
+def strip_newlines_from_responses(text:str) -> str:
+    """
+    eliminates all newline characters from user submissions,
+    leaving only the ones from the csv
+    """
+
+    # "I've read it!\r" only occurs at the end of the submission
+    return text.replace("I've read it!\r", "\\newline").replace("\r", " ").replace("\\newline", "\r")
+
+
 #######################################################
 #                   begin script                      #
 #######################################################
 
 users = []
 
-with open("source.csv", "r", encoding="utf-8") as file:
-    file.readline()  # clear header row
-    for response in file:
+with open("source.csv", "r", encoding="utf-8") as f:
+    # input = "\r".join([line for line in file])
+    header = f.readline()
+    input = f.read().split("I've read it!")
 
-        cleaned = clean_data(response).strip().split(",")
+header = clean_data(header).split(",")
+columns = { QUESTION_CODES[question]: idx for (idx, question) in zip(range(len(header)), header) }
 
-        # ######## uncomment this block in case the questionnaire
-        # ######## changes and we need to change index values again
-        # idx = 0
-        # for d in cleaned:
-        #     print(idx, d)
-        #     idx += 1
-        # break
+for response in input[:-1]:
 
-        name = cleaned[1]
+    cleaned = clean_data(response).strip().split(",")
 
-        # age
-        is_minor = "Under" in cleaned[2]
+    # ######## uncomment this block in case the questionnaire
+    # ######## changes and we need to change index values again
+    # idx = 0
+    # for d in cleaned:
+    #     print(idx, d)
+    #     idx += 1
+    # break
 
-        # what kind of feedback are you looking for?
-        fb_wanted = translate_fb_pref(cleaned[3])
+    name = cleaned[columns['name']]
 
-        # how much output will you bring?
-        words_wr = WORDCOUNT_CODE[cleaned[4]]
+    # age
+    is_minor = "Under" in cleaned[columns['is_minor']]
 
-        # what genre do you write?
-        genre_wr = cleaned[5].split("& ")
+    # what kind of feedback are you looking for?
+    fb_wanted = translate_fb_pref(cleaned[columns['fb_wanted']])
 
-        # what content warnings apply to your story?
-        cw_wr = [
-            GENRE_CODE[cw] if cw in GENRE_CODE else cw for cw in cleaned[6].split("& ")
+    # how much output will you bring?
+    words_wr = WORDCOUNT_CODE[cleaned[columns['words_wr']]]
+
+    # what genre do you write?
+    genre_wr = cleaned[columns['genre_wr']].split("& ")
+
+    # what content warnings apply to your story?
+    cw_wr = [
+        GENRE_CODE[cw] if cw in GENRE_CODE else cw for cw in cleaned[columns['cw_wr']].split("& ")
+    ]
+
+    # chapter links
+    chapters = cleaned[columns['chapters']]
+
+    # what size group are you okay with?
+    size_pref = [SIZE_CODE[pref] for pref in cleaned[columns['size_pref']].split("& ")]
+
+    # what kind of feedback are you okay giving?
+    fb_provide = [translate_fb_pref(cleaned[columns['fb_provide']])]
+
+    # how many words can you commit to critiquing each week?
+    words_r = WORDCOUNT_CODE[cleaned[columns['words_r']]]
+
+    # what genres will you be bringing to group?
+    genre_r = [
+        GENRE_CODE[genre] if genre in GENRE_CODE else genre
+        for genre in cleaned[columns['genre_r']].split("& ")
+    ]
+
+    # which content warnings do you want to avoid?
+    cw_veto = (
+        []
+        if cleaned[columns['cw_veto']] == "I'll read anything!"
+        else [
+            GENRE_CODE[cw] if cw in GENRE_CODE else cw
+            for cw in cleaned[columns['cw_veto']].split("& ")
         ]
+    )
 
-        # what size group are you okay with?
-        size_pref = [SIZE_CODE[pref] for pref in cleaned[7].split("& ")]
+    # who would you like to be with?
+    team_pref = cleaned[columns['team_pref']]
 
-        # what kind of feedback are you okay giving?
-        fb_provide = [translate_fb_pref(cleaned[8])]
+    # who do you want to avoid?
+    team_veto = cleaned[columns['team_veto']]
 
-        # how many words can you commit to critiquing each week?
-        words_r = WORDCOUNT_CODE[cleaned[9]]
+    # # do you want to be in a contest-focused group?
+    # contest = cleaned[-1] == "Yes"
 
-        # what genres will you be bringing to group?
-        genre_r = [
-            GENRE_CODE[genre] if genre in GENRE_CODE else genre
-            for genre in cleaned[10].split("& ")
-        ]
+    user = Person(
+        name,
+        is_minor=is_minor,
+        fb_wanted=fb_wanted,
+        words_wr=words_wr,
+        genre_wr=genre_wr,
+        cw_wr=cw_wr,
+        size_pref=size_pref,
+        fb_provide=fb_provide,
+        words_r=words_r,
+        genre_r=genre_r,
+        cw_veto=cw_veto,
+        team_pref=team_pref,
+        team_veto=team_veto,
+        # seasonal=contest,
+    )
 
-        # which content warnings do you want to avoid?
-        cw_veto = (
-            []
-            if cleaned[11] == "I'll read anything!"
-            else [
-                GENRE_CODE[cw] if cw in GENRE_CODE else cw
-                for cw in cleaned[11].split("& ")
-            ]
-        )
-
-        # who would you like to be with?
-        team_pref = cleaned[12]
-
-        # who do you want to avoid?
-        team_veto = cleaned[13]
-
-        # # do you want to be in a contest-focused group?
-        # contest = cleaned[-1] == "Yes"
-
-        user = Person(
-            name,
-            is_minor=is_minor,
-            fb_wanted=fb_wanted,
-            words_wr=words_wr,
-            genre_wr=genre_wr,
-            cw_wr=cw_wr,
-            size_pref=size_pref,
-            fb_provide=fb_provide,
-            words_r=words_r,
-            genre_r=genre_r,
-            cw_veto=cw_veto,
-            team_pref=team_pref,
-            team_veto=team_veto,
-            # seasonal=contest,
-        )
-
-        users.append(user)
+    users.append(user)
 
 clean_team_reqs(users)
+
+# print(users)
 
 # contest = [p for p in users if p.seasonal]
 # non_contest = [p for p in users if not p.seasonal]
