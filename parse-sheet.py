@@ -671,19 +671,12 @@ with open("source.csv", "r", encoding="utf-8") as f:
     input = f.read().split("I've read it!")
 
 header = clean_data(header).split(",")
-columns = { QUESTION_CODES[question]: idx for (idx, question) in zip(range(len(header)), header) }
+columns = { QUESTION_CODES[question]: idx 
+           for (idx, question) in zip(range(len(header)), header) }
 
 for response in input[:-1]:
 
     cleaned = clean_data(response).strip().split(",")
-
-    # ######## uncomment this block in case the questionnaire
-    # ######## changes and we need to change index values again
-    # idx = 0
-    # for d in cleaned:
-    #     print(idx, d)
-    #     idx += 1
-    # break
 
     name = cleaned[columns['name']]
 
