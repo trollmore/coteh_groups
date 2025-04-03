@@ -137,7 +137,7 @@ class Person:
         self.size_pref = kwargs["size_pref"]
         self.match_pref = kwargs["match_pref"]
         self.prev_month = kwargs["prev_month"]
-        self.prev_group = kwargs["prev_group"] if kwargs["prev_group"] else None
+        self.prev_group = kwargs["prev_group"] if kwargs["prev_group"] else "None"
         if isinstance(self.match_pref, list):
             self.match_pref = " ".join(self.match_pref)
         self.match_veto = kwargs["match_veto"]
@@ -220,7 +220,7 @@ class Person:
 
 class Group:
     def __init__(self, name="", members=None, seasonal=False, reqs=None) -> None:
-        self.members = members if members else []
+        self.members : list[Person] = members if members else []
         self.reqs = reqs if reqs else []
         self.name = name
         if members:
@@ -358,14 +358,17 @@ class Group:
     def print_names(self) -> str:
         return ", ".join(p.name for p in self.members)
 
-    def print_wc_table(self):
-        output = f"Group with reqs {self.reqs}\n"
-        longest_name_len = max([len(p.name) for p in self.members])
+    def print_reqs(self) -> str:
+        return f"Group with reqs {self.reqs}"
+
+    def print_wc_table(self, force_longest=0):
+        longest_name_len = force_longest if force_longest else max([len(p.name) for p in self.members])
+        output = f"{extend_str('NAME', longest_name_len)} WR  R   SIZE\n"
         for p in self.members:
             output += f"{extend_str(p.name, longest_name_len)} "
-            output += f"wr {p.words_wr}, "
-            output += f"r {p.words_r}, "
-            output += f"s {max(p.size_pref)}"
+            output += f"{p.words_wr}   "
+            output += f"{p.words_r}   "
+            output += f"{max(p.size_pref)}"
             output += "\n"
         return output
 
@@ -394,12 +397,53 @@ class Group:
             output += f"{p.prev_group}\n"
         return output
 
+    def print_combined_table(self, force_longest_name=0, force_longest_group=0, wc=True, size_pref=True, cw=True, prev=True, reqs=True):
+        longest_name_len = force_longest_name if force_longest_name else max([len(p.name) for p in self.members])
+        longest_group_len = force_longest_group if force_longest_group else max(len(p.prev_group) for p in self.members)
+        output = f"{self.print_reqs()}\n" if reqs else ""
+        output += f"{extend_str('NAME', longest_name_len)} "
+
+        headers = []
+        if wc:
+            headers.append("WR R ")
+        if size_pref:
+            headers.append("SZ ")
+        if prev:
+            headers.append(f"RETURN_STATUS  {extend_str('PREV_GROUP', longest_group_len)} ")
+        if cw:
+            headers.append("PROF SEX  GORE TRAU OTHER")
+        output += " |  ".join(headers) + "\n"
+
+        for p in self.members:
+            output += f"{extend_str(p.name, longest_name_len)} "
+
+            data = []
+            if wc:
+                data.append(f"{p.words_wr}  {p.words_r} ")
+            if size_pref:
+                data.append(f"{max(p.size_pref)}  ")
+            if prev:
+                data.append(f"{extend_str(p.prev_month, 13)}  {extend_str(p.prev_group, longest_group_len)} ")
+            if cw:
+                cw_str = ""
+                for cw in CONTENT_WARNINGS:
+                    if cw in p.cw_wr:
+                        cw_code = "√"
+                    elif cw in p.cw_veto:
+                        cw_code = "!"
+                    else:
+                        cw_code = " "
+                    cw_str += extend_str(cw_code, 5)
+                data.append(cw_str)
+            output += " |  ".join(data) + "\n"
+        return output
+
     def __repr__(self) -> str:
         return f"<<Group {self.name} (size {self.size}) with members {[mem.name for mem in self.members]} and fit score {self.fit()}>>"
 
 class Model:
     def __init__(self, groups=None, users=None) -> None:
-        self.groups = groups if groups else []
+        self.groups : list[Group] = groups if groups else []
         self.users = users if users else []
         self.available_names = GROUP_NAMES.copy()
 
@@ -673,15 +717,141 @@ class Model:
     def print_groups(self) -> str:
         return "\n".join([str(g) for g in self.groups])
 
-    def print_formatted_group_list(self):
-        return "\n".join(f" - {g.name}: {g.print_names()}" for g in self.groups)
-
     def print_fit(self) -> str:
         return f"total fit {self.total_fit}, avg fit {self.avg_fit} | {self.median_fit}"
 
     def __repr__(self) -> str:
-        output = f"<<Model with {len(self.users)} users in {self.group_count} groups; {self.print_fit()}>>\n"
-        output += self.print_groups()
+        output = f"<<Model with {len(self.users)} users in {self.group_count} groups; {self.print_fit()}>>"
+        # output += self.print_groups()
+        return output
+
+class Visualizer:
+    def __init__(self, model):
+        self.model : Model = model
+        self.longest_name = max(len(p.name) for p in self.model.users)
+
+    def model_info(self):
+        return str(self.model)
+
+    def group_fits(self):
+        return "\n".join( str(g) for g in self.model.groups)
+
+    def group_info(self, summary=True, wc=False, size_pref=False, cw=False, prev=False, reqs=False):
+        """
+        returns formatted compatibility information for each group
+        """
+        longest_group_name = max(len(p.prev_group) for p in self.model.users)
+
+        output = ""
+        for g in self.model.groups:
+
+            output += self.separator(text=f"{g.name.upper()} (fit score {g.fit()})", length=120, buffer=.25, border="-")
+
+            if summary:
+                output += f"{str(g)}\n"
+
+            output += g.print_combined_table(
+                                            force_longest_name=self.longest_name,
+                                            force_longest_group=longest_group_name,
+                                            wc=wc,
+                                            size_pref=size_pref,
+                                            cw=cw,
+                                            prev=prev,
+                                            reqs=reqs)
+
+            output += "\n"
+        return output
+
+    def separator(self, length=80, buffer=0.45, text="", border="#"):
+
+        buffer_len = length * buffer
+
+        title = text
+        flip = True
+        while len(title) < length:
+
+            fill_chr = " " if len(title) < buffer_len else border
+
+            if flip:
+                title = f"{fill_chr}{title}"
+            else:
+                title = f"{title}{fill_chr}"
+            flip = not flip
+        return f"{title}\n\n"
+
+    def returning_groups(self):
+        output = "RETURNING GROUPS:\n"
+        for group_name, members in GROUPS.items():
+            if members:
+                output += f"{group_name}\n"
+                for u in members:
+                    output += f"  {extend_str(u.name, self.longest_name)} {u.prev_month}"
+        return output
+
+    def print_formatted_group_list(self):
+        return "GROUPS:\n" + "\n".join(f" - {g.name}: {g.print_names()}" for g in self.model.groups)
+
+class Auditor:
+    def __init__(self, model):
+        self.model : Model = model
+
+    def check_groups(self):
+        print("AUDITING GROUP REQUIREMENTS")
+        for g in self.model.groups:
+            print(f"{g.name}:")
+            output = ""
+            output += self.check_group_size(g)
+            output += self.check_read_write_parity(g)
+            output += self.check_cw_collision(g)
+            output += self.check_group_assignments(g)
+
+            print(output if output else "  no issues found\n", end="")
+
+    def check_group_size(self, group:Group):
+        output = ""
+        for p in group.members:
+            if group.size not in p.size_pref:
+                output += f"  {p.name}: group size {group.size} not in preference set {p.size_pref}\n"
+        return output
+    
+    def check_read_write_parity(self, group:Group):
+        max_write = max(p.words_wr for p in group.members)
+        output = ""
+        for p in group.members:
+            if p.words_r < p.words_wr:
+                output += f"  {p.name}: feedback commitment lower than feedback requested (read {p.words_r}, write {p.words_wr})\n"
+            if p.words_r < max_write:
+                output += f"  {p.name}: feedback commitment ({p.words_r}) lower than group output maximum ({max_write})\n"
+        return output
+    
+    def check_cw_collision(self, group:Group):
+        output = ""
+        cws = { cw : [] for cw in CONTENT_WARNINGS }
+
+        for p in group.members:
+            for cw in CONTENT_WARNINGS:
+                if cw in p.cw_wr:
+                    cws[cw].append(p.name)
+
+        for p in group.members:
+            for cw in CONTENT_WARNINGS:
+                if cw in p.cw_veto:
+                    if cws[cw]:
+                        output += f"  {p.name}: group contains vetoed content warning {cw} {cws[cw]}"
+        return output
+
+    def check_group_assignments(self, group:Group):
+        output = ""
+        for p in group.members:
+            if p.prev_month == "new_group" and p.prev_group.lower() == group.name.lower():
+                output += f"  {p.name}: assigned to last month's group after requesting new group\n"
+
+        rehomed_members = [p for p in group.members if p.prev_month == "new_group"]
+        if rehomed_members:
+            prev_homes = list(set([p.prev_group for p in rehomed_members]))
+            if len(rehomed_members) != len(prev_homes):
+                output += f"  group members reunited after requesting new group\n"
+
         return output
 
 #######################################################
@@ -728,6 +898,8 @@ with open("source.csv", "r", encoding="utf-8") as f:
 
 columns = { QUESTION_CODES[question]: idx 
            for (idx, question) in zip(range(len(header)), header) }
+
+naughty_list = []
 
 for response in input:
 
@@ -789,7 +961,10 @@ for response in input:
     prev_group = response[columns['prev_group']].replace(" ","").lower()
 
     # # do you want to be in a contest-focused group?
-    # contest = response[-1] == "Yes"
+    # contest = response[-1] == "Yes"k
+
+    # did you have problem members?
+    naughty_list.append((name, response[columns['naughty_list']]))
 
     user = Person(
         name,
@@ -812,45 +987,29 @@ for response in input:
     if prev_group:
         GROUPS[prev_group].append(user)
 
-
 clean_team_reqs(users)
 
-# for user in users:
-#     print(user.name)
-# print("total users:", len(users))
-
-# contest = [p for p in users if p.seasonal]
-# non_contest = [p for p in users if not p.seasonal]
-
-# m1 = Model(users=contest.copy())
-# m2 = Model(users=non_contest.copy())
-
 m = Model(users=users.copy())
-# for m in [m1, m2]:
 
-longest_name = max(len(p.name) for p in m.users)
 reqs = m.get_req_clusters()
 m.make_groups(premades=reqs)
 
+v = Visualizer(m)
+a = Auditor(m)
 
-print(m)
+print(v.model_info(), "\n")
+print(v.group_info( summary=False, 
+                    wc=True,
+                    cw=True,
+                    prev=True))
 
-for g in m.groups:
-    print("----------------")
-    print(g.print_wc_table())
-    print(g.print_cw_table(longest_name))
+a.check_groups()
+
 print()
+print("PROBLEM MEMBER REPORTS:")
+print("\n".join(f'{name}: "{txt}"' for name, txt in naughty_list if txt))
+print("----")
 
-print("RETURNING GROUPS:")
-for group_name, members in GROUPS.items():
-    if members:
-        print(group_name)
-        for u in members:
-            print(f"  {extend_str(u.name, longest_name)} {u.prev_month}")
-print()
-for g in m.groups:
-    print(g.name)
-    print(g.print_return_table())
+print("\n", v.print_formatted_group_list())
 
-print("GROUPS:")
-print(m.print_formatted_group_list())
+
