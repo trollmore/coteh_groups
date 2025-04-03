@@ -1,7 +1,8 @@
 from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
 from functools import reduce
 import csv
+from random import shuffle, seed
+from datetime import datetime
 
 WORDCOUNT_CODE = {
     "Up to 2,000": 0,
@@ -44,8 +45,15 @@ SORT_WEIGHTS = {
     "cw_gore": 18, # same as above
     "cw_swearing": 12,
     "group_size": 10,
+    "new_group": 5,
     "size_pref": 5,
     "genre": 5,
+}
+
+GROUP_SORT_MODES = {
+    "No, I'd like to mix things up. (We will try to put you with new people.)" : "new_group",
+    "No, I wasn't in crit groups last month" : "no_group",
+    "Yes, I want to continue with the same group.  (We will replace members who opt out.)" : "same_group"
 }
 
 QUESTION_CODES = {
@@ -73,6 +81,27 @@ QUESTION_CODES = {
     'Is there anyone you want to be matched with?  (For best results, please only list their names, separated by commas.)' : 'match_request',
 }
 
+GROUP_NAMES = [
+    "Aardvarktillery",
+    "Axelotl",
+    "BadgerPunch",
+    "BunnyBomb",
+    "FalchionFish",
+    "FoxSpear",
+    "GrenadeFly",
+    "GatlingGoose",
+    "GlockCroc",
+    "MouseGun",
+    "HippoHammer",
+    "Newtclear",
+    "Scythesnake",
+    "ShurikenShark",
+    "TadPolearm",
+    "WarTurtle",
+]
+
+GROUPS = { name.lower() : [] for name in GROUP_NAMES}
+
 # used for fuzzy matching on name fields for team requests and vetos
 # values below 80 don't seem to work very well; max 99
 NAME_TOLERANCE = 90
@@ -85,6 +114,11 @@ def extend_str(input, length):
     gap_len = length - len(input)
     spacer = " " * gap_len if gap_len > 0 else ""
     return input + spacer
+
+# initialize random seed based on current month and year
+seed_value = datetime.now().month + datetime.now().year
+seed(seed_value)
+
 
 
 #######################################################
@@ -102,6 +136,8 @@ class Person:
         self.cw_veto = kwargs["cw_veto"] if "cw_veto" in kwargs else []
         self.size_pref = kwargs["size_pref"]
         self.match_pref = kwargs["match_pref"]
+        self.prev_month = kwargs["prev_month"]
+        self.prev_group = kwargs["prev_group"] if kwargs["prev_group"] else None
         if isinstance(self.match_pref, list):
             self.match_pref = " ".join(self.match_pref)
         self.match_veto = kwargs["match_veto"]
@@ -118,10 +154,26 @@ class Person:
 
         return word_diff 
 
+    def is_legacy(self, other):
+        """
+        returns True if both people were in the same group last month and want to continue;
+        false otherwise
+        """
+        if self.prev_month != "same_group": return False
+        if other.prev_month != "same_group": return False
+        return self.prev_group == other.prev_group
+
+    def new_group_dist(self, other):
+        if self.prev_month == "new_group" or other.prev_month == "new_group":
+            if self.prev_group == other.prev_group:
+                return 1
+        return 0
+
     def friend_dist(self, other):
         my_friend = other.name in self.match_pref
         their_friend = self.name in other.match_pref
-        return 1 if my_friend or their_friend else 0
+        legacy = self.is_legacy(other)
+        return 1 if my_friend or their_friend or legacy else 0
 
     def veto_dist(self, other):
         my_foe = other.name in self.match_veto
@@ -141,6 +193,7 @@ class Person:
         total += self.word_dist(other) * SORT_WEIGHTS["wordcount"]
         total += self.veto_dist(other) * SORT_WEIGHTS["group_veto"]
         total += self.genre_dist(other) * SORT_WEIGHTS["genre"]
+        total += self.new_group_dist(other) * SORT_WEIGHTS["new_group"]
         # we want friends to increase fit (e.g. make it lower)
         total -= self.friend_dist(other) * SORT_WEIGHTS["friend_req"]
 
@@ -149,24 +202,27 @@ class Person:
     def __repr__(self) -> str:
         return "\n".join(
             [
-                self.name,
-                str(self.words_wr),
-                str(self.words_r),
-                str(self.genre_wr),
-                str(self.genre_r),
-                str(self.cw_wr),
-                str(self.cw_veto),
-                str(self.size_pref),
-                str(self.match_pref),
-                str(self.match_veto),
-                str(self.seasonal),
+                f"name:       {self.name}",
+                f"words_wr:   {self.words_wr}",
+                f"words_r:    {self.words_r}",
+                f"genre_wr:   {self.genre_wr}",
+                f"genre_r:    {self.genre_r}",
+                f"cr_wr:      {self.cw_wr}",
+                f"cr_veto:    {self.cw_veto}",
+                f"size_pref:  {self.size_pref}",
+                f"prev_group: {self.prev_group}",
+                f"prev_month: {self.prev_month}",
+                f"match_pref: {self.match_pref}",
+                f"match_veto: {self.match_veto}",
+                f"seasonal:   {self.seasonal}",
             ]
         )
 
 class Group:
-    def __init__(self, members=None, seasonal=False, reqs=None) -> None:
+    def __init__(self, name="", members=None, seasonal=False, reqs=None) -> None:
         self.members = members if members else []
         self.reqs = reqs if reqs else []
+        self.name = name
         if members:
             self.seasonal = members[0].seasonal
         else:
@@ -329,13 +385,23 @@ class Group:
             output += "\n"
         return output
 
+    def print_return_table(self, force_longest=0):
+        longest_name_len = force_longest if force_longest else max([len(p.name) for p in self.members])
+        output = f"{extend_str("NAME", longest_name_len)}  RETURN STATUS   PREV GROUP\n"
+        for p in self.members:
+            output += f"{extend_str(p.name, longest_name_len)}  "
+            output += f"{extend_str(p.prev_month, 13)}   "
+            output += f"{p.prev_group}\n"
+        return output
+
     def __repr__(self) -> str:
-        return f"<<Group of size {self.size} with members {[mem.name for mem in self.members]} and fit score {self.fit()}>>"
+        return f"<<Group {self.name} (size {self.size}) with members {[mem.name for mem in self.members]} and fit score {self.fit()}>>"
 
 class Model:
     def __init__(self, groups=None, users=None) -> None:
         self.groups = groups if groups else []
         self.users = users if users else []
+        self.available_names = GROUP_NAMES.copy()
 
     @property
     def group_count(self):
@@ -347,13 +413,19 @@ class Model:
 
     @property
     def avg_fit(self) -> float:
-        return round(self.total_fit / len(self.groups), 2)
+        if len(self.groups) > 0:
+            return round(self.total_fit / len(self.groups), 2)
+        else:
+            return float("inf")
 
     @property
     def median_fit(self) -> float:
-        fits = [g.fit() for g in self.groups]
-        fits.sort()
-        return fits[len(fits)//2]
+        if len(self.groups) > 0:
+            fits = [g.fit() for g in self.groups]
+            fits.sort()
+            return fits[len(fits)//2]
+        else:
+            return float("inf")
 
     def sort_users(self, func) -> None:
         self.users.sort(key=func)
@@ -428,7 +500,7 @@ class Model:
                         if not (idx is None):
                             users.pop(idx)
 
-        curr_group : Group = Group([])
+        curr_group : Group = Group()
 
         while users:
             p = users.pop(0)
@@ -437,11 +509,12 @@ class Model:
                 curr_group = curr_group.permute_with(p)
             else:
                 self.groups.append(curr_group)
-                curr_group = Group([p])
+                curr_group = Group(members=[p])
 
         self.groups.append(curr_group)
 
         self.balance_group_weights()
+        self.name_groups()
         return
 
     def balance_group_weights(self) -> None:
@@ -463,6 +536,28 @@ class Model:
 
         for g_idx in range(1, len(self.groups)-1):
             self.get_local_group_minima(g_idx)
+
+    def name_groups(self):
+        reserved_names = []
+        returning = [u for u in self.users if u.prev_month == "same_group"]
+        for u in returning:
+            if u.prev_group in self.available_names:
+                self.available_names.remove(u.prev_group)
+                reserved_names.append(u.prev_group)
+
+
+        for g in self.groups:
+            returning = [u for u in g.members if u.prev_month == "same_group"]
+            req_names = [u.prev_group for u in returning]
+            while req_names:
+                tmp_name = req_names.pop(0)
+                if tmp_name in reserved_names:
+                    self.reserved_names.remove(tmp_name)
+                    g.name = tmp_name
+                    break
+            if not g.name:
+                shuffle(self.available_names)
+                g.name = self.available_names.pop(0)
 
     def reassign_singletons(self):
         """
@@ -578,11 +673,16 @@ class Model:
     def print_groups(self) -> str:
         return "\n".join([str(g) for g in self.groups])
 
+    def print_formatted_group_list(self):
+        return "\n".join(f" - {g.name}: {g.print_names()}" for g in self.groups)
+
     def print_fit(self) -> str:
         return f"total fit {self.total_fit}, avg fit {self.avg_fit} | {self.median_fit}"
 
     def __repr__(self) -> str:
-        return f"<<Model with {len(self.users)} users in {self.group_count} groups; {self.print_fit()}>>"
+        output = f"<<Model with {len(self.users)} users in {self.group_count} groups; {self.print_fit()}>>\n"
+        output += self.print_groups()
+        return output
 
 #######################################################
 #                  loose functions                    #
@@ -625,16 +725,15 @@ with open("source.csv", "r", encoding="utf-8") as f:
     header = [question.replace("\n","") for question in data[0]]
     input = data[1:]
 
-    # print(header)
-    # print(input)
 
-# header = clean_data(header).split(",")
 columns = { QUESTION_CODES[question]: idx 
            for (idx, question) in zip(range(len(header)), header) }
 
 for response in input:
 
-    # response = clean_data(response).strip().split(",")
+    quiz = response[columns['quiz']]
+    if quiz == "TRUE":
+        continue
 
     name = response[columns['name']]
 
@@ -683,6 +782,12 @@ for response in input:
     # who do you want to avoid?
     match_veto = response[columns['match_veto']]
 
+    # where you in groups last month? if so, stay with them?
+    prev_month = GROUP_SORT_MODES[response[columns['prev_month']]]
+
+    # which group last month?
+    prev_group = response[columns['prev_group']].replace(" ","").lower()
+
     # # do you want to be in a contest-focused group?
     # contest = response[-1] == "Yes"
 
@@ -697,17 +802,22 @@ for response in input:
         cw_veto=cw_veto,
         match_pref=match_pref,
         match_veto=match_veto,
+        prev_month=prev_month,
+        prev_group=prev_group
         # seasonal=contest,
     )
 
     users.append(user)
 
+    if prev_group:
+        GROUPS[prev_group].append(user)
+
 
 clean_team_reqs(users)
 
-for user in users:
-    print(user.name)
-# print(users)
+# for user in users:
+#     print(user.name)
+# print("total users:", len(users))
 
 # contest = [p for p in users if p.seasonal]
 # non_contest = [p for p in users if not p.seasonal]
@@ -722,11 +832,25 @@ longest_name = max(len(p.name) for p in m.users)
 reqs = m.get_req_clusters()
 m.make_groups(premades=reqs)
 
+
 print(m)
-print(m.print_groups())
 
 for g in m.groups:
     print("----------------")
     print(g.print_wc_table())
     print(g.print_cw_table(longest_name))
 print()
+
+print("RETURNING GROUPS:")
+for group_name, members in GROUPS.items():
+    if members:
+        print(group_name)
+        for u in members:
+            print(f"  {extend_str(u.name, longest_name)} {u.prev_month}")
+print()
+for g in m.groups:
+    print(g.name)
+    print(g.print_return_table())
+
+print("GROUPS:")
+print(m.print_formatted_group_list())
